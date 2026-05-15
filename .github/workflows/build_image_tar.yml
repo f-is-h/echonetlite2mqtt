@@ -1,0 +1,46 @@
+name: Build Docker image tar
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/discovery-rescan
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+          - platform: linux/arm64
+            arch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Write build info
+        run: echo ref=${{ github.ref }}, sha=${{ github.sha }} > ./buildinfo
+
+      - name: Build image tar
+        run: |
+          docker buildx build \
+            --platform ${{ matrix.platform }} \
+            --file dockerfile \
+            --tag echonetlite2mqtt:discovery-rescan-${{ matrix.arch }} \
+            --output type=docker,dest=/tmp/echonetlite2mqtt-discovery-rescan-${{ matrix.arch }}.tar \
+            .
+
+      - name: Upload image tar
+        uses: actions/upload-artifact@v4
+        with:
+          name: echonetlite2mqtt-discovery-rescan-${{ matrix.arch }}
+          path: /tmp/echonetlite2mqtt-discovery-rescan-${{ matrix.arch }}.tar
+          retention-days: 7
