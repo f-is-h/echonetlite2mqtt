@@ -547,7 +547,23 @@ export class EchoNetLiteController{
     this.startDiscoveryTimers();
   }
 
-  requestDeviceProperty = async (id:DeviceId, propertyName:string):Promise<void> =>
+  private readonly pendingPropertyReads = new Map<string, Promise<void>>();
+
+  // MQTT batches and other callers can overlap. Coalesce only identical GETs;
+  // control writes never use this path.
+  requestDeviceProperty = (id:DeviceId, propertyName:string):Promise<void> =>
+  {
+    const key = `${id.ip}/${id.eoj}/${propertyName}`;
+    const pending = this.pendingPropertyReads.get(key);
+    if (pending !== undefined) return pending;
+    const read = this.readDeviceProperty(id, propertyName).finally(()=>{
+      if (this.pendingPropertyReads.get(key) === read) this.pendingPropertyReads.delete(key);
+    });
+    this.pendingPropertyReads.set(key, read);
+    return read;
+  }
+
+  private readDeviceProperty = async (id:DeviceId, propertyName:string):Promise<void> =>
   {
     const device = this.findDeviceCallback(id.internalId);
     const property = device?.properties.find(_=>_.name === propertyName);
@@ -570,7 +586,7 @@ export class EchoNetLiteController{
       epc, 
       edt:"",
       tid:""});
-    let response = res.matchResponse(_=>_.els.ESV === ELSV.GET_RES && (epc in _.els.DETAILs));
+    let response = res.matchResponse(_=>(_.els.ESV === ELSV.GET_RES || _.els.ESV === ELSV.GET_SNA) && (epc in _.els.DETAILs));
     if(response === undefined)
     {
       // リトライする
@@ -583,7 +599,7 @@ export class EchoNetLiteController{
         epc, 
         edt:"",
         tid:""});
-      response = res.matchResponse(_=>_.els.ESV === ELSV.GET_RES && (epc in _.els.DETAILs));
+      response = res.matchResponse(_=>(_.els.ESV === ELSV.GET_RES || _.els.ESV === ELSV.GET_SNA) && (epc in _.els.DETAILs));
     }
     if(response === undefined)
     {
@@ -591,6 +607,13 @@ export class EchoNetLiteController{
       return;
     }
 
+    // An explicit PDC=0 response is unavailable, never a numeric zero or fresh
+    // sample. Do not retry a refusal as though it were a lost packet.
+    if (response.els.DETAILs[epc] === "")
+    {
+      Logger.info("[ECHONETLite]", `requestDeviceProperty: GET unavailable. ip=${id.ip} eoj=${id.eoj} epc=${epc}`);
+      return;
+    }
     {
       const value = this.deviceConverter.convertPropertyValue(property, response.els.DETAILs[epc]);
       if(value === undefined)

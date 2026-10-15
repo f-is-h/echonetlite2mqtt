@@ -153,7 +153,7 @@ export class EchoNetCommunicator
     {
       this.getHandlers.forEach(_=>_(rinfo,els));
     }
-    this.commandResponse?.addResponse({rinfo, els});
+    for (const pending of this.commandResponses) pending.addResponse({rinfo, els});
     
     this.reveivedHandlers.forEach(_=>_(rinfo,els));
   }
@@ -250,6 +250,7 @@ export class EchoNetCommunicator
 
   static commandTimeout=1000;
   static commandResponse:CommandResponse|undefined = undefined;
+  static readonly commandResponses = new Set<CommandResponse>();
   public static execCommandPromise(
     ip: string,
     seoj: string,
@@ -272,13 +273,19 @@ export class EchoNetCommunicator
     command.tid = EL.bytesToString(tid);
     const commandResponse = new CommandResponse(command);
     this.commandResponse = commandResponse;
+    this.commandResponses.add(commandResponse);
 
     return new Promise<CommandResponse>((resolve,reject)=>{
       const handle = setTimeout(()=>{
+        // Do not let a late reply clear a subsequent command's collector.
+        this.commandResponses.delete(commandResponse);
+        if (this.commandResponse === commandResponse) this.commandResponse = undefined;
+        commandResponse.setCallback(()=>{});
         reject({message:"timeout", commandResponse});
       }, this.commandTimeout);
       commandResponse.setCallback(()=>{
-        this.commandResponse = undefined;
+        this.commandResponses.delete(commandResponse);
+        if (this.commandResponse === commandResponse) this.commandResponse = undefined;
         clearTimeout(handle);
         resolve(commandResponse);
       });
@@ -310,13 +317,19 @@ export class EchoNetCommunicator
     command.tid = EL.bytesToString(tid);
     const commandResponse = new CommandResponse(command);
     this.commandResponse = commandResponse;
+    this.commandResponses.add(commandResponse);
 
     return await new Promise<CommandResponse>((resolve,reject)=>{
       const handle = setTimeout(()=>{
+        // Do not let a late reply clear a subsequent command's collector.
+        this.commandResponses.delete(commandResponse);
+        if (this.commandResponse === commandResponse) this.commandResponse = undefined;
+        commandResponse.setCallback(()=>{});
         reject({message:"timeout", commandResponse});
       }, this.commandTimeout);
       commandResponse.setCallback(()=>{
-        this.commandResponse = undefined;
+        this.commandResponses.delete(commandResponse);
+        if (this.commandResponse === commandResponse) this.commandResponse = undefined;
         clearTimeout(handle);
         resolve(commandResponse);
       });
@@ -346,9 +359,12 @@ export class EchoNetCommunicator
     command.tid = EL.bytesToString(tid);
     const commandResponse = new CommandResponse(command);
     this.commandResponse = commandResponse;
+    this.commandResponses.add(commandResponse);
 
     return new Promise<CommandResponse>((resolve,reject)=>{
       setTimeout(()=>{
+        this.commandResponses.delete(commandResponse);
+        if (this.commandResponse === commandResponse) this.commandResponse = undefined;
         resolve(commandResponse);
       }, timeout);
     });
@@ -406,14 +422,16 @@ export class CommandResponse
   public addResponse = (response:Response):void =>
   {
     if((this.command.ip === EL.EL_Multi || response.rinfo.address === this.command.ip ) && 
-      response.els.SEOJ === this.command.deoj && response.els.DEOJ === this.command.seoj)
+      response.els.SEOJ === this.command.deoj && response.els.DEOJ === this.command.seoj &&
+      response.els.TID === this.command.tid &&
+      (this.command.epc === "" || this.command.epc in response.els.DETAILs))
     {
       if(response.els.ESV === ELSV.SET_RES && this.command.esv === ELSV.SETC)
       {
         this.responses.push(response);
         this.callback();
       }
-      if(response.els.ESV === ELSV.GET_RES && this.command.esv === ELSV.GET)
+      if((response.els.ESV === ELSV.GET_RES || response.els.ESV === ELSV.GET_SNA) && this.command.esv === ELSV.GET)
       {
         this.responses.push(response);
         this.callback();

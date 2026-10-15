@@ -1,6 +1,6 @@
 {
   "name": "echonetlite2mqtt",
-  "version": "3.7.3",
+  "version": "3.7.3-readfix.20261014",
   "description": "",
   "main": "server/index.ts",
   "scripts": {

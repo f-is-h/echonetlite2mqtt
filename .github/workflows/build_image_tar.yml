@@ -7,7 +7,23 @@ on:
       - fix/discovery-rescan
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Verify read-only protocol regressions
+        run: npm test -- --runInBand ReadPropertyTests CommandResponseTests RawNodeMergeTests DiscoveryOptionsTests EchoNetPropertyConverterTests
+
   build:
+    needs: verify
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -31,16 +47,22 @@ jobs:
 
       - name: Build image tar
         run: |
+          VERSION=$(node -p "require('./package.json').version")
           docker buildx build \
             --platform ${{ matrix.platform }} \
             --file dockerfile \
             --tag echonetlite2mqtt:discovery-rescan-${{ matrix.arch }} \
+            --tag "echonetlite2mqtt:${VERSION}-${{ matrix.arch }}" \
             --output type=docker,dest=/tmp/echonetlite2mqtt-discovery-rescan-${{ matrix.arch }}.tar \
             .
+          cd /tmp
+          sha256sum echonetlite2mqtt-discovery-rescan-${{ matrix.arch }}.tar > echonetlite2mqtt-discovery-rescan-${{ matrix.arch }}.tar.sha256
 
       - name: Upload image tar
         uses: actions/upload-artifact@v4
         with:
           name: echonetlite2mqtt-discovery-rescan-${{ matrix.arch }}
-          path: /tmp/echonetlite2mqtt-discovery-rescan-${{ matrix.arch }}.tar
+          path: |
+            /tmp/echonetlite2mqtt-discovery-rescan-${{ matrix.arch }}.tar
+            /tmp/echonetlite2mqtt-discovery-rescan-${{ matrix.arch }}.tar.sha256
           retention-days: 7
