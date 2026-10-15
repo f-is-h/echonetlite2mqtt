@@ -28,24 +28,3 @@ jobs:
       run: |
         docker compose -f compose.yml ps || true
         docker compose -f compose.yml logs --tail=150 || true
-
-  baseline-discovery-check:
-    if: github.ref == 'refs/heads/fix/discovery-rescan'
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: 8d6c8d1cdd431bd82cbe23bf276d52cbb05a110e
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 14.x
-          cache: npm
-      - run: npm ci
-      - name: Check previous deployed source against the same discovery fixture
-        run: npm test -- --runInBand IntegrationTests
-      - name: Diagnose baseline discovery fixture failures
-        if: failure()
-        run: |
-          docker compose -f compose.yml ps || true
-          docker compose -f compose.yml logs --tail=150 || true

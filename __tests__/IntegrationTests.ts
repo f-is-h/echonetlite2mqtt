@@ -22,14 +22,7 @@ const defaultCompose : ComposeSpecification = {
         }
       },
       aircon01:{
-        image:"banban525/echonet-lite-kaden-emulator:latest",
-        ports:["3001:3000"],
-        volumes:[
-          //"./test/aircon01-settings.json:/home/node/app/config/aircon01-settings.json"
-        ],
-        environment:{
-          //SETTINGS: "/home/node/app/config/aircon01-settings.json"
-        },
+        build: {context: ".", dockerfile: "__tests__/fixtures/Dockerfile.echo-peer"},
         networks:{
           echonet_network_test:{
             ipv4_address:"10.254.247.3"

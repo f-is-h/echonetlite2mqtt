@@ -1,0 +1,4 @@
+FROM node:20-alpine
+WORKDIR /app
+COPY __tests__/fixtures/echo-peer.cjs ./peer.cjs
+CMD ["node", "peer.cjs"]

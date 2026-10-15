@@ -19,8 +19,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - name: Verify read-only protocol regressions
-        run: npm test -- --runInBand ReadPropertyTests CommandResponseTests RawNodeMergeTests DiscoveryOptionsTests EchoNetPropertyConverterTests
+      - name: Verify protocol and Docker discovery
+        run: npm test -- --runInBand
 
   build:
     needs: verify
